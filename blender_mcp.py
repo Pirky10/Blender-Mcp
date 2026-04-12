@@ -57,6 +57,14 @@ class Config:
     POLYMCP_PATH = r'your_path'
     ENABLE_CACHING = True
     CACHE_SIZE = 256
+    
+    # External Integration Settings
+    POLYHAVEN_API_BASE = "https://api.polyhaven.com"
+    SKETCHFAB_API_BASE = "https://api.sketchfab.com/v3"
+    HYPER3D_API_BASE = "https://hyperhuman.deemos.com/api/v2"
+    HYPER3D_FAL_API_BASE = "https://queue.fal.run/fal-ai/hyper3d"
+    CSM_API_BASE = "https://api.csm.ai"
+    RODIN_FREE_TRIAL_KEY = "k9TcfFoEhNd9cCPP2guHAHHHkctZHIRhZDywZ1euGUXwihbYLpOjQhofby80NJez"
 
 # ============================================
 # 📦 PACKAGE MANAGEMENT
@@ -70,6 +78,7 @@ def check_and_install_packages():
         'pydantic': 'pydantic',
         'docstring_parser': 'docstring-parser',
         'numpy': 'numpy',
+        'requests': 'requests',
     }
     
     python_exe = sys.executable
@@ -143,6 +152,20 @@ import tempfile
 import json
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
+
+# Ensure integrations package is importable
+_addon_dir = os.path.dirname(os.path.abspath(__file__))
+if _addon_dir not in sys.path:
+    sys.path.insert(0, _addon_dir)
+
+try:
+    from integrations import ALL_INTEGRATION_TOOLS
+    logger.info(f"✓ Loaded {len(ALL_INTEGRATION_TOOLS)} integration tools")
+    _integrations_available = True
+except ImportError as e:
+    logger.warning(f"Integration modules not available: {e}")
+    ALL_INTEGRATION_TOOLS = []
+    _integrations_available = False
 
 # ============================================
 # 🔄 THREAD-SAFE EXECUTION SYSTEM
@@ -5419,6 +5442,13 @@ def create_blender_mcp_server():
         capture_viewport_image
     ]
     
+    # Add external integration tools (Poly Haven, Sketchfab, Hyper3D, CSM.ai, Hunyuan3D, Mixamo)
+    if _integrations_available and ALL_INTEGRATION_TOOLS:
+        # Wrap each integration function with thread_safe
+        wrapped_integration_tools = [thread_safe(tool) for tool in ALL_INTEGRATION_TOOLS]
+        all_tools.extend(wrapped_integration_tools)
+        logger.info(f"Added {len(wrapped_integration_tools)} integration tools")
+    
     # Create MCP server
     app = expose_tools(
         tools=all_tools,
@@ -5449,6 +5479,7 @@ class MCPSERVER_PT_main_panel(bpy.types.Panel):
     
     def draw(self, context):
         layout = self.layout
+        scene = context.scene
         
         # Server status
         box = layout.box()
@@ -5483,7 +5514,62 @@ class MCPSERVER_PT_main_panel(bpy.types.Panel):
         col.label(text=f"Objects: {len(bpy.data.objects)}")
         col.label(text=f"Materials: {len(bpy.data.materials)}")
         col.label(text=f"Textures: {len(bpy.data.images)}")
-        col.label(text=f"Frame: {context.scene.frame_current}/{context.scene.frame_end}")
+        col.label(text=f"Frame: {scene.frame_current}/{scene.frame_end}")
+        
+        # ============================================
+        # 🔌 EXTERNAL INTEGRATIONS
+        # ============================================
+        
+        box = layout.box()
+        box.label(text="External Integrations", icon='LINKED')
+        
+        # Poly Haven (no API key needed)
+        row = box.row()
+        row.prop(scene, "mcp_use_polyhaven", text="Poly Haven (Free Assets)")
+        
+        # Sketchfab
+        row = box.row()
+        row.prop(scene, "mcp_use_sketchfab", text="Sketchfab")
+        if scene.mcp_use_sketchfab:
+            col = box.column(align=True)
+            col.prop(scene, "mcp_sketchfab_api_key", text="API Key")
+            col.label(text="Get key: sketchfab.com/settings/password", icon='INFO')
+        
+        box.separator()
+        
+        # Hyper3D Rodin
+        row = box.row()
+        row.prop(scene, "mcp_use_hyper3d", text="Hyper3D Rodin")
+        if scene.mcp_use_hyper3d:
+            col = box.column(align=True)
+            col.prop(scene, "mcp_hyper3d_mode", text="Mode")
+            col.prop(scene, "mcp_hyper3d_api_key", text="API Key")
+            col.label(text="Get key: hyper3d.ai or fal.ai", icon='INFO')
+        
+        box.separator()
+        
+        # CSM.ai
+        row = box.row()
+        row.prop(scene, "mcp_use_csm", text="CSM.ai (Search + Animation)")
+        if scene.mcp_use_csm:
+            col = box.column(align=True)
+            col.prop(scene, "mcp_csm_api_key", text="API Key")
+            col.label(text="Get key: 3d.csm.ai/dashboard/profile/developer-settings", icon='INFO')
+        
+        box.separator()
+        
+        # Hunyuan3D
+        row = box.row()
+        row.prop(scene, "mcp_use_hunyuan3d", text="Hunyuan3D")
+        if scene.mcp_use_hunyuan3d:
+            col = box.column(align=True)
+            col.prop(scene, "mcp_hunyuan3d_mode", text="Mode")
+            if scene.mcp_hunyuan3d_mode == 'OFFICIAL_API':
+                col.prop(scene, "mcp_hunyuan3d_secret_id", text="SecretId")
+                col.prop(scene, "mcp_hunyuan3d_secret_key", text="SecretKey")
+                col.label(text="Get keys: cloud.tencent.com", icon='INFO')
+            elif scene.mcp_hunyuan3d_mode == 'LOCAL_API':
+                col.prop(scene, "mcp_hunyuan3d_api_url", text="API URL")
 
 class MCPSERVER_OT_start_server(bpy.types.Operator):
     """Start MCP Server"""
@@ -5589,12 +5675,108 @@ classes = [
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-    logger.info("MCP Server addon registered")
+    
+    # Register integration scene properties
+    bpy.types.Scene.mcp_use_polyhaven = bpy.props.BoolProperty(
+        name="Use Poly Haven",
+        description="Enable Poly Haven integration for free HDRIs, textures and models",
+        default=False
+    )
+    bpy.types.Scene.mcp_use_sketchfab = bpy.props.BoolProperty(
+        name="Use Sketchfab",
+        description="Enable Sketchfab integration for 3D model search and download",
+        default=False
+    )
+    bpy.types.Scene.mcp_sketchfab_api_key = bpy.props.StringProperty(
+        name="Sketchfab API Key",
+        description="Your Sketchfab API key (get at sketchfab.com/settings/password)",
+        default="",
+        subtype='PASSWORD'
+    )
+    bpy.types.Scene.mcp_use_hyper3d = bpy.props.BoolProperty(
+        name="Use Hyper3D Rodin",
+        description="Enable Hyper3D Rodin AI 3D model generation",
+        default=False
+    )
+    bpy.types.Scene.mcp_hyper3d_mode = bpy.props.EnumProperty(
+        name="Hyper3D Mode",
+        description="Select the Hyper3D Rodin API platform",
+        items=[
+            ('MAIN_SITE', 'Main Site', 'Use hyperhuman.deemos.com API'),
+            ('FAL_AI', 'Fal.ai', 'Use fal.ai hosted API'),
+        ],
+        default='MAIN_SITE'
+    )
+    bpy.types.Scene.mcp_hyper3d_api_key = bpy.props.StringProperty(
+        name="Hyper3D API Key",
+        description="Your Hyper3D Rodin API key",
+        default="",
+        subtype='PASSWORD'
+    )
+    bpy.types.Scene.mcp_use_csm = bpy.props.BoolProperty(
+        name="Use CSM.ai",
+        description="Enable CSM.ai for 3D model search and animation",
+        default=False
+    )
+    bpy.types.Scene.mcp_csm_api_key = bpy.props.StringProperty(
+        name="CSM.ai API Key",
+        description="Your CSM.ai API key (get at 3d.csm.ai/dashboard/profile/developer-settings)",
+        default="",
+        subtype='PASSWORD'
+    )
+    bpy.types.Scene.mcp_use_hunyuan3d = bpy.props.BoolProperty(
+        name="Use Hunyuan3D",
+        description="Enable Tencent Hunyuan3D AI model generation",
+        default=False
+    )
+    bpy.types.Scene.mcp_hunyuan3d_mode = bpy.props.EnumProperty(
+        name="Hunyuan3D Mode",
+        description="Select the Hunyuan3D API mode",
+        items=[
+            ('OFFICIAL_API', 'Official API', 'Use Tencent Cloud official API'),
+            ('LOCAL_API', 'Local API', 'Use locally hosted Hunyuan3D API'),
+        ],
+        default='OFFICIAL_API'
+    )
+    bpy.types.Scene.mcp_hunyuan3d_secret_id = bpy.props.StringProperty(
+        name="Hunyuan3D SecretId",
+        description="Tencent Cloud SecretId for Hunyuan3D",
+        default="",
+        subtype='PASSWORD'
+    )
+    bpy.types.Scene.mcp_hunyuan3d_secret_key = bpy.props.StringProperty(
+        name="Hunyuan3D SecretKey",
+        description="Tencent Cloud SecretKey for Hunyuan3D",
+        default="",
+        subtype='PASSWORD'
+    )
+    bpy.types.Scene.mcp_hunyuan3d_api_url = bpy.props.StringProperty(
+        name="Hunyuan3D Local API URL",
+        description="URL for locally hosted Hunyuan3D API",
+        default="http://localhost:7860"
+    )
+    
+    logger.info("MCP Server addon registered with integration properties")
 
 def unregister():
     # Stop server if running
     if server_thread and server_thread.is_alive():
         thread_executor.stop()
+    
+    # Unregister integration scene properties
+    props_to_remove = [
+        'mcp_use_polyhaven', 'mcp_use_sketchfab', 'mcp_sketchfab_api_key',
+        'mcp_use_hyper3d', 'mcp_hyper3d_mode', 'mcp_hyper3d_api_key',
+        'mcp_use_csm', 'mcp_csm_api_key',
+        'mcp_use_hunyuan3d', 'mcp_hunyuan3d_mode',
+        'mcp_hunyuan3d_secret_id', 'mcp_hunyuan3d_secret_key',
+        'mcp_hunyuan3d_api_url',
+    ]
+    for prop in props_to_remove:
+        try:
+            delattr(bpy.types.Scene, prop)
+        except AttributeError:
+            pass
     
     for cls in classes:
         bpy.utils.unregister_class(cls)
