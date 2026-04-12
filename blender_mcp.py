@@ -54,7 +54,6 @@ class Config:
     MAX_QUEUE_SIZE = 1000
     THREAD_SAFE_OPERATIONS = True
     AUTO_INSTALL_PACKAGES = True
-    POLYMCP_PATH = r'your_path'
     ENABLE_CACHING = True
     CACHE_SIZE = 256
     
@@ -79,6 +78,7 @@ def check_and_install_packages():
         'docstring_parser': 'docstring-parser',
         'numpy': 'numpy',
         'requests': 'requests',
+        'polymcp': 'polymcp',
     }
     
     python_exe = sys.executable
@@ -129,14 +129,11 @@ packages_ok = check_and_install_packages()
 
 if packages_ok:
     try:
-        # Add polymcp path
-        if Config.POLYMCP_PATH not in sys.path:
-            sys.path.append(Config.POLYMCP_PATH)
-            
         import uvicorn
         from fastapi import FastAPI, HTTPException
-        from polymcp_toolkit import expose_tools
+        from polymcp.polymcp_toolkit.expose import expose_tools
         import numpy as np
+        import inspect
         logger.info("✓ All packages loaded successfully")
     except ImportError as e:
         logger.error(f"Import error after installation: {e}")
@@ -290,6 +287,10 @@ def thread_safe(func):
         else:
             return func(*args, **kwargs)
     return wrapper
+
+# expose_tools is imported from polymcp.polymcp_toolkit.expose above.
+# It provides the full MCP protocol: JSON-RPC 2.0, Pydantic validation,
+# tool invocation, and all compatibility endpoints.
 
 @thread_safe
 def capture_viewport_image(
@@ -5581,43 +5582,9 @@ class MCPSERVER_OT_start_server(bpy.types.Operator):
         global server_thread, server_app
         
         try:
-            bpy.ops.object.select_all(action='SELECT')
-            bpy.ops.object.delete()
-            
-            # Avvia il processore di code
-            start_queue_processor()
-            
-            # Create MCP server app
-            server_app = create_blender_mcp_server()
-            
-            # Run in separate thread
-            def run_server():
-                uvicorn.run(server_app, host="0.0.0.0", port=8000)
-            
-            server_thread = threading.Thread(target=run_server, daemon=True)
-            server_thread.start()
-            
-            self.report({'INFO'}, "MCP Server started on http://localhost:8000")
-            
-        except Exception as e:
-            self.report({'ERROR'}, f"Failed to start server: {str(e)}")
-            
-        return {'FINISHED'}
-
-class MCPSERVER_OT_start_server(bpy.types.Operator):
-    """Start MCP Server"""
-    bl_idname = "mcp.start_server"
-    bl_label = "Start MCP Server"
-    bl_options = {'REGISTER'}
-    
-    def execute(self, context):
-        global server_thread, server_app
-        
-        try:
             # Start thread-safe executor
             thread_executor.start()
-            bpy.ops.object.select_all(action='SELECT')
-            bpy.ops.object.delete()
+            
             # Create MCP server app
             server_app = create_blender_mcp_server()
             
