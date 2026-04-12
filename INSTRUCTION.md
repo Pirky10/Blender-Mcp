@@ -241,7 +241,7 @@ Visit [mixamo.com](https://www.mixamo.com) to browse and download animation FBX 
 1. Go to [sketchfab.com](https://sketchfab.com) and **sign in** (or create a free account)
 2. Click your **avatar** (top-right) → **Settings**
 3. In the left sidebar, click **"Password & API"**
-4. Your **API Token** is at the bottom — a 32-character string like: `YOUR_SKETCHFAB_API_KEY_HERE`
+4. Your **API Token** is at the bottom — a 32-character string like: `24xxxxxxxxxxxxxxxxae48`
 5. Copy this token
 
 > **Note:** Sketchfab was acquired by Epic Games. The settings may redirect to `fab.com`, but the API token still works the same way.
