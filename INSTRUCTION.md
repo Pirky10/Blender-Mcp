@@ -69,7 +69,7 @@ You do NOT need to install these manually.
 ### Step 1: Download the Project
 
 ```bash
-git clone https://github.com/YourUsername/Blender-MCP-Server.git
+git clone https://github.com/Pirky10/Blender-Mcp.git
 ```
 
 Or download the ZIP and extract it to a known location.
@@ -118,14 +118,35 @@ scripts/addons/
     └── strategy.py
 ```
 
-### Alternative: Run from Project Folder
+### Alternative: Symlink from Project Folder (Recommended for Developers)
 
-Instead of copying files, you can add the project folder to Blender's addon paths:
+Instead of copying files every time you make changes, you can **symlink** the addon files into Blender's addons folder. This way your project folder stays the single source of truth:
 
-1. **Edit → Preferences → File Paths**
-2. Under **Script Directories**, click `+` and add the project folder's parent directory
-3. Restart Blender
-4. Enable the addon in **Edit → Preferences → Add-ons** → search "MCP"
+```bash
+# macOS — adjust the Blender version number (e.g. 4.2, 4.3):
+ln -s /full/path/to/Blender-MCP-Server/blender_mcp.py \
+  ~/Library/Application\ Support/Blender/4.2/scripts/addons/blender_mcp.py
+
+ln -s /full/path/to/Blender-MCP-Server/integrations \
+  ~/Library/Application\ Support/Blender/4.2/scripts/addons/integrations
+```
+
+```bash
+# Windows (run Command Prompt as Administrator):
+mklink "C:\Users\YOU\AppData\Roaming\Blender Foundation\Blender\4.2\scripts\addons\blender_mcp.py" "C:\path\to\Blender-MCP-Server\blender_mcp.py"
+mklink /D "C:\Users\YOU\AppData\Roaming\Blender Foundation\Blender\4.2\scripts\addons\integrations" "C:\path\to\Blender-MCP-Server\integrations"
+```
+
+```bash
+# Linux:
+ln -s /full/path/to/Blender-MCP-Server/blender_mcp.py \
+  ~/.config/blender/4.2/scripts/addons/blender_mcp.py
+
+ln -s /full/path/to/Blender-MCP-Server/integrations \
+  ~/.config/blender/4.2/scripts/addons/integrations
+```
+
+After creating the symlinks, restart Blender and enable the addon in **Edit → Preferences → Add-ons** → search "MCP".
 
 ### Step 4: Enable the Addon
 
