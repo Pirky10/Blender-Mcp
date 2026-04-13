@@ -5473,6 +5473,18 @@ def create_blender_mcp_server():
 # Global server instance
 server_thread = None
 server_app = None
+_uvicorn_server = None  # Handle to uvicorn.Server for proper shutdown
+
+def _is_server_running():
+    """Check if the MCP server is actually running."""
+    global server_thread, _uvicorn_server
+    if server_thread is not None and server_thread.is_alive():
+        return True
+    # Thread died or was never started — clean up stale references
+    if server_thread is not None and not server_thread.is_alive():
+        server_thread = None
+        _uvicorn_server = None
+    return False
 
 class MCPSERVER_PT_main_panel(bpy.types.Panel):
     """Main MCP Server Panel"""
@@ -5491,7 +5503,7 @@ class MCPSERVER_PT_main_panel(bpy.types.Panel):
         box.label(text="Server Status", icon='WORLD_DATA')
         
         row = box.row(align=True)
-        if server_thread is None or not server_thread.is_alive():
+        if not _is_server_running():
             row.operator("mcp.start_server", text="Start Server", icon='PLAY')
         else:
             row.operator("mcp.stop_server", text="Stop Server", icon='PAUSE')
@@ -5583,7 +5595,12 @@ class MCPSERVER_OT_start_server(bpy.types.Operator):
     bl_options = {'REGISTER'}
     
     def execute(self, context):
-        global server_thread, server_app
+        global server_thread, server_app, _uvicorn_server
+        
+        # Prevent double-start
+        if _is_server_running():
+            self.report({'WARNING'}, "MCP Server is already running")
+            return {'CANCELLED'}
         
         try:
             # Start thread-safe executor
@@ -5592,14 +5609,18 @@ class MCPSERVER_OT_start_server(bpy.types.Operator):
             # Create MCP server app
             server_app = create_blender_mcp_server()
             
+            # Create uvicorn server with a handle for shutdown
+            config = uvicorn.Config(
+                server_app,
+                host=Config.HOST,
+                port=Config.PORT,
+                log_level="info"
+            )
+            _uvicorn_server = uvicorn.Server(config)
+            
             # Run in separate thread
             def run_server():
-                uvicorn.run(
-                    server_app,
-                    host=Config.HOST,
-                    port=Config.PORT,
-                    log_level="info"
-                )
+                _uvicorn_server.run()
             
             server_thread = threading.Thread(target=run_server, daemon=True)
             server_thread.start()
@@ -5622,13 +5643,22 @@ class MCPSERVER_OT_stop_server(bpy.types.Operator):
     bl_options = {'REGISTER'}
     
     def execute(self, context):
-        global server_thread
+        global server_thread, _uvicorn_server
         
         # Stop thread-safe executor
         thread_executor.stop()
         
-        # Stop server thread
+        # Signal uvicorn to shut down gracefully
+        if _uvicorn_server is not None:
+            _uvicorn_server.should_exit = True
+        
+        # Wait briefly for the thread to finish
+        if server_thread is not None and server_thread.is_alive():
+            server_thread.join(timeout=3.0)
+        
+        # Clean up references
         server_thread = None
+        _uvicorn_server = None
         
         self.report({'INFO'}, "MCP Server stopped")
         logger.info("MCP Server stopped")
