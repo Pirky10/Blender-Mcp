@@ -521,7 +521,7 @@ def create_particle_system(
     object_name: str,
     particle_type: str = "HAIR",
     count: int = 1000,
-    physics_type: str = "NEWTONIAN",
+    physics_type: str = "NEWTON",
     emit_from: str = "FACE",
     lifetime: int = 50,
     gravity: float = 1.0,
@@ -545,7 +545,7 @@ def create_particle_system(
         object_name: Emitter object
         particle_type: HAIR or EMITTER
         count: Number of particles
-        physics_type: NEWTONIAN, KEYED, BOIDS, FLUID, NO
+        physics_type: NEWTON, KEYED, BOIDS, FLUID, NO
         emit_from: VERT, FACE, VOLUME
         lifetime: Particle lifetime in frames
         gravity: Gravity influence
@@ -585,7 +585,7 @@ def create_particle_system(
     # Physics settings
     settings.physics_type = physics_type
     
-    if physics_type == "NEWTONIAN":
+    if physics_type == "NEWTON":
         settings.mass = 1.0
         settings.effector_weights.gravity = gravity
         settings.normal_factor = velocity_normal
@@ -700,6 +700,9 @@ def add_force_field(
     bpy.ops.object.empty_add(type='SPHERE', location=location)
     field_obj = bpy.context.active_object
     field_obj.name = name or f"ForceField_{field_type}"
+    
+    # Initialize force field data
+    bpy.ops.object.forcefield_toggle()
     
     # Add force field
     field_obj.field.type = field_type
@@ -3933,7 +3936,8 @@ def create_light(
     light_data.energy = energy
     light_data.color = color
     light_data.use_shadow = use_shadow
-    light_data.use_contact_shadow = use_contact_shadow
+    if hasattr(light_data, "use_contact_shadow"):
+        light_data.use_contact_shadow = use_contact_shadow
     
     # Type-specific settings
     if light_type == "POINT":
