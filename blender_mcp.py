@@ -1681,7 +1681,7 @@ def setup_fluid_simulation(
     # Gas specific settings
     elif simulation_type == "GAS":
         domain.use_noise = True
-        domain.noise_scale = 2.0
+        domain.noise_scale = 2
         domain.noise_strength = 1.0
     
     # Cache settings
