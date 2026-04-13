@@ -1635,8 +1635,10 @@ def setup_fluid_simulation(
     if not obj:
         raise ValueError(f"Object '{domain_name}' not found")
     
-    # Add fluid modifier
-    fluid_mod = obj.modifiers.new(name="Fluid", type='FLUID')
+    # Reuse existing Fluid modifier or create a new one
+    fluid_mod = obj.modifiers.get("Fluid")
+    if fluid_mod is None:
+        fluid_mod = obj.modifiers.new(name="Fluid", type='FLUID')
     fluid_mod.fluid_type = 'DOMAIN'
     
     domain = fluid_mod.domain_settings
@@ -1646,7 +1648,8 @@ def setup_fluid_simulation(
     domain.resolution_max = resolution
     domain.time_scale = time_scale
     domain.use_adaptive_domain = use_adaptive_domain
-    domain.use_collision_objects = use_collision_objects
+    if hasattr(domain, 'use_collision_objects'):
+        domain.use_collision_objects = use_collision_objects
     
     # Liquid specific settings
     if simulation_type == "LIQUID":
@@ -1724,7 +1727,7 @@ def add_fluid_flow(
     
     Args:
         object_name: Flow object
-        flow_type: INFLOW, OUTFLOW, SMOKE, FIRE, LIQUID
+        flow_type: SMOKE, FIRE, BOTH (fire+smoke), LIQUID
         flow_behavior: INFLOW, OUTFLOW, GEOMETRY
         flow_rate: Flow emission rate
         temperature: Temperature differential
@@ -1745,8 +1748,17 @@ def add_fluid_flow(
     smoke_color = smoke_color or [0.7, 0.7, 0.7]
     texture_offset = texture_offset or [0, 0, 0]
     
-    # Add fluid modifier
-    fluid_mod = obj.modifiers.new(name="Fluid", type='FLUID')
+    # Map common aliases to Blender's actual enum values
+    flow_type_map = {
+        'FIRE_AND_SMOKE': 'BOTH',
+        'SMOKE_AND_FIRE': 'BOTH',
+    }
+    flow_type = flow_type_map.get(flow_type, flow_type)
+    
+    # Reuse existing Fluid modifier or create a new one
+    fluid_mod = obj.modifiers.get("Fluid")
+    if fluid_mod is None:
+        fluid_mod = obj.modifiers.new(name="Fluid", type='FLUID')
     fluid_mod.fluid_type = 'FLOW'
     
     flow = fluid_mod.flow_settings
