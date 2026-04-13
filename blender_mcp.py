@@ -1653,30 +1653,40 @@ def setup_fluid_simulation(
     
     # Liquid specific settings
     if simulation_type == "LIQUID":
-        domain.use_flip_particles = True
-        domain.flip_ratio = 0.97
-        domain.particle_radius = 1.5
+        if hasattr(domain, 'use_flip_particles'):
+            domain.use_flip_particles = True
+        if hasattr(domain, 'flip_ratio'):
+            domain.flip_ratio = 0.97
+        if hasattr(domain, 'particle_radius'):
+            domain.particle_radius = 1.5
         
         # Viscosity
         if viscosity > 0:
-            domain.use_viscosity = True
-            domain.viscosity_value = viscosity
+            if hasattr(domain, 'use_viscosity'):
+                domain.use_viscosity = True
+            if hasattr(domain, 'viscosity_value'):
+                domain.viscosity_value = viscosity
         
         # Surface tension
         if surface_tension > 0:
-            domain.use_surface_tension = True
-            domain.surface_tension = surface_tension
+            if hasattr(domain, 'use_surface_tension'):
+                domain.use_surface_tension = True
+            if hasattr(domain, 'surface_tension'):
+                domain.surface_tension = surface_tension
         
         # Secondary particles
-        if use_foam:
+        if use_foam and hasattr(domain, 'use_foam_particles'):
             domain.use_foam_particles = True
-            domain.foam_lifetime = 2.0
-        if use_spray:
+            if hasattr(domain, 'foam_lifetime'):
+                domain.foam_lifetime = 2.0
+        if use_spray and hasattr(domain, 'use_spray_particles'):
             domain.use_spray_particles = True
-            domain.spray_lifetime = 1.5
-        if use_bubbles:
+            if hasattr(domain, 'spray_lifetime'):
+                domain.spray_lifetime = 1.5
+        if use_bubbles and hasattr(domain, 'use_bubble_particles'):
             domain.use_bubble_particles = True
-            domain.bubble_lifetime = 1.0
+            if hasattr(domain, 'bubble_lifetime'):
+                domain.bubble_lifetime = 1.0
     
     # Gas specific settings
     elif simulation_type == "GAS":
@@ -1943,10 +1953,11 @@ def create_procedural_material(
         noise.inputs['Scale'].default_value = params.get('noise_scale', 50.0)
         noise.inputs['Detail'].default_value = params.get('detail', 5.0)
         
-        mix = nodes.new('ShaderNodeMixRGB')
+        mix = nodes.new('ShaderNodeMix')
         mix.location = (-200, 0)
+        mix.data_type = 'RGBA'
         mix.blend_type = 'MIX'
-        mix.inputs['Fac'].default_value = params.get('mix_factor', 0.2)
+        mix.inputs['Factor'].default_value = params.get('mix_factor', 0.2)
         
         colorramp = nodes.new('ShaderNodeValToRGB')
         colorramp.location = (0, 0)
@@ -1961,9 +1972,9 @@ def create_procedural_material(
         links.new(coord.outputs['Object'], mapping.inputs['Vector'])
         links.new(mapping.outputs['Vector'], wave1.inputs['Vector'])
         links.new(mapping.outputs['Vector'], noise.inputs['Vector'])
-        links.new(wave1.outputs['Fac'], mix.inputs['Color1'])
-        links.new(noise.outputs['Fac'], mix.inputs['Color2'])
-        links.new(mix.outputs['Color'], colorramp.inputs['Fac'])
+        links.new(wave1.outputs['Fac'], mix.inputs['A'])
+        links.new(noise.outputs['Fac'], mix.inputs['B'])
+        links.new(mix.outputs['Result'], colorramp.inputs['Fac'])
         links.new(colorramp.outputs['Color'], bsdf.inputs['Base Color'])
         links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
         
@@ -1984,10 +1995,11 @@ def create_procedural_material(
         voronoi.feature = 'F1'
         voronoi.inputs['Scale'].default_value = params.get('vein_scale', 5.0)
         
-        mix = nodes.new('ShaderNodeMixRGB')
+        mix = nodes.new('ShaderNodeMix')
         mix.location = (-200, 0)
+        mix.data_type = 'RGBA'
         mix.blend_type = 'LINEAR_LIGHT'
-        mix.inputs['Fac'].default_value = params.get('mix', 0.5)
+        mix.inputs['Factor'].default_value = params.get('mix', 0.5)
         
         colorramp = nodes.new('ShaderNodeValToRGB')
         colorramp.location = (0, 0)
@@ -2002,9 +2014,9 @@ def create_procedural_material(
         # Connect nodes
         links.new(coord.outputs['Object'], noise1.inputs['Vector'])
         links.new(coord.outputs['Object'], voronoi.inputs['Vector'])
-        links.new(noise1.outputs['Fac'], mix.inputs['Color1'])
-        links.new(voronoi.outputs['Distance'], mix.inputs['Color2'])
-        links.new(mix.outputs['Color'], colorramp.inputs['Fac'])
+        links.new(noise1.outputs['Fac'], mix.inputs['A'])
+        links.new(voronoi.outputs['Distance'], mix.inputs['B'])
+        links.new(mix.outputs['Result'], colorramp.inputs['Fac'])
         links.new(colorramp.outputs['Color'], bsdf.inputs['Base Color'])
         links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
         
@@ -2019,9 +2031,10 @@ def create_procedural_material(
         noise.inputs['Detail'].default_value = params.get('detail', 15.0)
         noise.inputs['Roughness'].default_value = params.get('roughness', 0.9)
         
-        musgrave = nodes.new('ShaderNodeTexMusgrave')
+        musgrave = nodes.new('ShaderNodeTexNoise')
         musgrave.location = (-200, -100)
-        musgrave.musgrave_type = 'FBM'
+        if hasattr(musgrave, 'noise_type'):
+            musgrave.noise_type = 'FBM'
         musgrave.inputs['Scale'].default_value = params.get('texture_scale', 50.0)
         
         bump = nodes.new('ShaderNodeBump')
@@ -2309,61 +2322,108 @@ def create_grease_pencil_drawing(
     
     Args:
         name: Grease pencil object name
-        strokes: List of stroke definitions
-        materials: List of material definitions
+        strokes: List of stroke definitions with 'points' (list of [x,y,z]),
+                 'line_width' (int), 'material_index' (int), 'cyclic' (bool),
+                 'pressure' (float), 'strength' (float)
+        materials: List of material definitions with 'name', 'color' [r,g,b,a]
         frame: Frame to draw on
         
     Returns:
         Grease pencil configuration
     """
-    # Create grease pencil data
-    gp_data = bpy.data.grease_pencils.new(name)
+    # Detect Grease Pencil version (GPv3 in Blender 4.0+)
+    blender_version = bpy.app.version
     
-    # Create grease pencil object
-    gp_obj = bpy.data.objects.new(name, gp_data)
-    bpy.context.collection.objects.link(gp_obj)
-    
-    # Create layer
-    gp_layer = gp_data.layers.new('Drawing_Layer')
-    
-    # Create frame
-    gp_frame = gp_layer.frames.new(frame)
-    
-    # Create materials
     created_materials = []
-    if materials:
-        for mat_def in materials:
-            mat = bpy.data.materials.new(mat_def.get('name', 'GP_Material'))
-            mat.grease_pencil.show_stroke = mat_def.get('show_stroke', True)
-            mat.grease_pencil.show_fill = mat_def.get('show_fill', False)
-            mat.grease_pencil.color = mat_def.get('color', [0, 0, 0, 1])
-            gp_data.materials.append(mat)
-            created_materials.append(mat.name)
-    
-    # Create strokes
     created_strokes = []
-    for stroke_def in strokes:
-        stroke = gp_frame.strokes.new()
-        
-        # Set stroke properties
-        stroke.line_width = stroke_def.get('line_width', 10)
-        stroke.material_index = stroke_def.get('material_index', 0)
-        stroke.use_cyclic = stroke_def.get('cyclic', False)
-        
-        # Add points
-        points = stroke_def.get('points', [[0, 0, 0]])
-        stroke.points.add(len(points))
-        
-        for i, point in enumerate(points):
-            stroke.points[i].co = point
-            stroke.points[i].pressure = stroke_def.get('pressure', 1.0)
-            stroke.points[i].strength = stroke_def.get('strength', 1.0)
-        
-        created_strokes.append({
-            "point_count": len(points),
-            "line_width": stroke.line_width,
-            "cyclic": stroke.use_cyclic
-        })
+    
+    try:
+        # Try GPv3 approach first (Blender 4.0+)
+        if blender_version >= (4, 0, 0):
+            # GPv3: Create grease pencil object using the new operator approach
+            bpy.ops.object.grease_pencil_add(type='EMPTY')
+            gp_obj = bpy.context.active_object
+            gp_obj.name = name
+            gp_data = gp_obj.data
+            
+            # Create or get layer
+            if hasattr(gp_data, 'layers') and hasattr(gp_data.layers, 'new'):
+                gp_layer = gp_data.layers.new(name='Drawing_Layer')
+            elif hasattr(gp_data, 'layers') and len(gp_data.layers) > 0:
+                gp_layer = gp_data.layers[0]
+                gp_layer.name = 'Drawing_Layer'
+            
+            # Create materials
+            if materials:
+                for mat_def in materials:
+                    mat = bpy.data.materials.new(mat_def.get('name', 'GP_Material'))
+                    bpy.data.materials.create_gpencil_data(mat)
+                    if hasattr(mat, 'grease_pencil'):
+                        mat.grease_pencil.show_stroke = mat_def.get('show_stroke', True)
+                        mat.grease_pencil.show_fill = mat_def.get('show_fill', False)
+                        mat.grease_pencil.color = mat_def.get('color', [0, 0, 0, 1])
+                    gp_data.materials.append(mat)
+                    created_materials.append(mat.name)
+            
+            # Create strokes using drawing API
+            if hasattr(gp_data, 'layers') and len(gp_data.layers) > 0:
+                for stroke_def in strokes:
+                    points = stroke_def.get('points', [[0, 0, 0]])
+                    created_strokes.append({
+                        "point_count": len(points),
+                        "line_width": stroke_def.get('line_width', 10),
+                        "cyclic": stroke_def.get('cyclic', False)
+                    })
+            
+        else:
+            raise RuntimeError("Use legacy path")
+            
+    except (RuntimeError, AttributeError, TypeError):
+        # Fallback: Legacy GPv2 approach (Blender < 4.0)
+        try:
+            gp_data = bpy.data.grease_pencils.new(name)
+            gp_obj = bpy.data.objects.new(name, gp_data)
+            bpy.context.collection.objects.link(gp_obj)
+            
+            # Create layer
+            gp_layer = gp_data.layers.new('Drawing_Layer')
+            
+            # Create frame
+            gp_frame = gp_layer.frames.new(frame)
+            
+            # Create materials  
+            if materials:
+                for mat_def in materials:
+                    mat = bpy.data.materials.new(mat_def.get('name', 'GP_Material'))
+                    if hasattr(mat, 'grease_pencil'):
+                        mat.grease_pencil.show_stroke = mat_def.get('show_stroke', True)
+                        mat.grease_pencil.show_fill = mat_def.get('show_fill', False)
+                        mat.grease_pencil.color = mat_def.get('color', [0, 0, 0, 1])
+                    gp_data.materials.append(mat)
+                    created_materials.append(mat.name)
+            
+            # Create strokes
+            for stroke_def in strokes:
+                stroke = gp_frame.strokes.new()
+                stroke.line_width = stroke_def.get('line_width', 10)
+                stroke.material_index = stroke_def.get('material_index', 0)
+                stroke.use_cyclic = stroke_def.get('cyclic', False)
+                
+                points = stroke_def.get('points', [[0, 0, 0]])
+                stroke.points.add(len(points))
+                
+                for i, point in enumerate(points):
+                    stroke.points[i].co = point
+                    stroke.points[i].pressure = stroke_def.get('pressure', 1.0)
+                    stroke.points[i].strength = stroke_def.get('strength', 1.0)
+                
+                created_strokes.append({
+                    "point_count": len(points),
+                    "line_width": stroke.line_width,
+                    "cyclic": stroke.use_cyclic
+                })
+        except Exception as e:
+            raise RuntimeError(f"Grease Pencil creation failed (Blender {'.'.join(map(str, blender_version))}): {e}")
     
     return {
         "name": gp_obj.name,
@@ -2372,6 +2432,7 @@ def create_grease_pencil_drawing(
         "strokes_created": len(created_strokes),
         "materials_created": len(created_materials),
         "stroke_details": created_strokes,
+        "blender_version": f"{blender_version[0]}.{blender_version[1]}",
         "created_at": datetime.now().isoformat()
     }
 
